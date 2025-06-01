@@ -164,14 +164,7 @@ function handleDownloadCreated(downloadItem) {
                   `Download ${downloadItem.id} cancelled due to policy restrictions.`
                 );
               });
-              handleDownloadAction(
-                downloadUrl,
-                {
-                  category: "Verification Error",
-                  riskLevel: CONFIG.MAX_ALLOWED_RISK_LEVEL + 1,
-                },
-                "block"
-              );
+              handleDownloadAction(downloadUrl, classification, "block");
             } else {
               chrome.downloads.resume(downloadItem.id, () => {
                 console.log(
