@@ -1,5 +1,5 @@
 {
-  "name": "Url FIltering Block",
+  "name": "Url Filtering Block",
   "description": "Block any downloads from URL category 'Social Networking' or risk level above 1, and display an indication to the user.",
   "version": "1.0",
   "manifest_version": 2,

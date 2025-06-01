@@ -1,6 +1,6 @@
 const CONFIG = {
   TENANT_ID: "itiel's tenant",
-  API_BASE_URL: "http://localhost:5000/v1/api/urlfiltering",
+  API_BASE_URL: "http://localhost:5000/v1/api/urlFiltering",
   BLOCKED_CATEGORIES: ["Social Networking"],
   MAX_ALLOWED_RISK_LEVEL: 1,
   DEFAULT_BLOCK_ON_ERROR: true,
