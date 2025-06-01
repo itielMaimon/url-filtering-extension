@@ -66,8 +66,9 @@ function showBlockNotification(downloadUrl, category, riskLevel) {
   });
 }
 
-function handleDownloadAction(downloadUrl, classification, action) {
+function handleDownloadAction(downloadUrl, classification, action, suggest) {
   if (action === "block") {
+    suggest?.({}); // Cancel the download
     showBlockNotification(
       downloadUrl,
       classification.category,
@@ -75,6 +76,7 @@ function handleDownloadAction(downloadUrl, classification, action) {
     );
     pendingDownloads.delete(downloadUrl);
   } else if (action === "allow") {
+    suggest?.({ filename: downloadItem.filename });
     const downloadInfo = pendingDownloads.get(downloadUrl);
     if (downloadInfo) {
       chrome.downloads.download(
@@ -119,7 +121,7 @@ function handleDeterminingFilename(downloadItem, suggest) {
   handleApiCall(apiUrl, { ApiVersion: "v1", Url: downloadUrl })
     .then((classification) => {
       const action = isDownloadBlocked(classification) ? "block" : "allow";
-      handleDownloadAction(downloadUrl, classification, action);
+      handleDownloadAction(downloadUrl, classification, action, suggest);
     })
     .catch((error) => {
       console.error(`Error processing download for ${downloadUrl}:`, error);
@@ -132,12 +134,14 @@ function handleDeterminingFilename(downloadItem, suggest) {
             category: "Processing Error",
             riskLevel: CONFIG.MAX_ALLOWED_RISK_LEVEL + 1,
           },
-          action
+          action,
+          suggest
         );
       } else {
         console.warn(
-          `Could not find pending download info for ${downloadUrl} during error handling.`
+          `onDeterminingFilename: Could not find pending download info for ${downloadUrl} during error handling.`
         );
+        suggest({}); // Cancel the download as a fallback
       }
     });
 
