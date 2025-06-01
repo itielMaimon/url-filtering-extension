@@ -14,7 +14,7 @@ function getApiUrl(tenantId) {
 // Store pending downloads
 const pendingDownloads = new Map();
 
-function handleApiCall(url, body) {
+function handleApiCallWithRetry(url, body, retries = 3, delay = 1000) {
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), CONFIG.API_TIMEOUT_MS);
 
@@ -35,7 +35,12 @@ function handleApiCall(url, body) {
       clearTimeout(timeoutId);
       if (error.name === "AbortError") {
         console.error(`Fetch timed out after ${CONFIG.API_TIMEOUT_MS}ms`);
-        throw new Error("API request timed out");
+      }
+      if (retries > 0) {
+        console.warn(`Retrying API call. Remaining retries: ${retries - 1}`);
+        return new Promise((resolve) => setTimeout(resolve, delay)).then(() =>
+          handleApiCallWithRetry(url, body, retries - 1, delay * 2)
+        );
       }
       throw error;
     });
@@ -74,29 +79,32 @@ function handleDownloadAction(downloadUrl, classification, action, suggest) {
       classification.category,
       classification.riskLevel
     );
-    pendingDownloads.delete(downloadUrl);
   } else if (action === "allow") {
-    suggest?.({ filename: downloadItem.filename });
-    const downloadInfo = pendingDownloads.get(downloadUrl);
-    if (downloadInfo) {
-      chrome.downloads.download(
-        { url: downloadInfo.url, filename: downloadInfo.filename },
-        (downloadId) => {
-          if (chrome.runtime.lastError) {
-            console.error(
-              `Failed to start download: ${chrome.runtime.lastError.message}`
-            );
-          } else {
-            console.log(`Download started with ID: ${downloadId}`);
-          }
-          pendingDownloads.delete(downloadUrl);
-        }
-      );
-    } else {
-      console.warn(`Could not find pending download info for ${downloadUrl}`);
-      pendingDownloads.delete(downloadUrl);
-    }
+    suggest?.({ filename: pendingDownloads.get(downloadUrl)?.filename });
   }
+
+  pendingDownloads.delete(downloadUrl);
+}
+
+function processDownload(downloadUrl, apiUrl, suggest) {
+  handleApiCallWithRetry(apiUrl, { ApiVersion: "v1", Url: downloadUrl })
+    .then((classification) => {
+      const action = isDownloadBlocked(classification) ? "block" : "allow";
+      handleDownloadAction(downloadUrl, classification, action, suggest);
+    })
+    .catch((error) => {
+      console.error(`Error processing download for ${downloadUrl}:`, error);
+      const action = CONFIG.DEFAULT_BLOCK_ON_ERROR ? "block" : "allow";
+      handleDownloadAction(
+        downloadUrl,
+        {
+          category: "Processing Error",
+          riskLevel: CONFIG.MAX_ALLOWED_RISK_LEVEL + 1,
+        },
+        action,
+        suggest
+      );
+    });
 }
 
 function handleDeterminingFilename(downloadItem, suggest) {
@@ -118,32 +126,7 @@ function handleDeterminingFilename(downloadItem, suggest) {
     url: downloadUrl,
   });
 
-  handleApiCall(apiUrl, { ApiVersion: "v1", Url: downloadUrl })
-    .then((classification) => {
-      const action = isDownloadBlocked(classification) ? "block" : "allow";
-      handleDownloadAction(downloadUrl, classification, action, suggest);
-    })
-    .catch((error) => {
-      console.error(`Error processing download for ${downloadUrl}:`, error);
-      const pendingInfo = pendingDownloads.get(downloadUrl);
-      if (pendingInfo) {
-        const action = CONFIG.DEFAULT_BLOCK_ON_ERROR ? "block" : "allow";
-        handleDownloadAction(
-          downloadUrl,
-          {
-            category: "Processing Error",
-            riskLevel: CONFIG.MAX_ALLOWED_RISK_LEVEL + 1,
-          },
-          action,
-          suggest
-        );
-      } else {
-        console.warn(
-          `onDeterminingFilename: Could not find pending download info for ${downloadUrl} during error handling.`
-        );
-        suggest({}); // Cancel the download as a fallback
-      }
-    });
+  processDownload(downloadUrl, apiUrl, suggest);
 
   return true;
 }
@@ -165,7 +148,7 @@ function handleDownloadCreated(downloadItem) {
         const downloadUrl = downloadItem.url;
         const apiUrl = getApiUrl(CONFIG.TENANT_ID);
 
-        handleApiCall(apiUrl, { ApiVersion: "v1", Url: downloadUrl })
+        handleApiCallWithRetry(apiUrl, { ApiVersion: "v1", Url: downloadUrl })
           .then((classification) => {
             const action = isDownloadBlocked(classification)
               ? "block"
