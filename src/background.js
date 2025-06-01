@@ -47,6 +47,9 @@ function handleApiCallWithRetry(url, body, retries = 3, delay = 1000) {
 }
 
 function isDownloadBlocked(classification) {
+  console.log(
+    `Checking if download is blocked: Category '${classification.category}', Risk Level ${classification.riskLevel}`
+  );
   const { category, riskLevel } = classification;
   return (
     CONFIG.BLOCKED_CATEGORIES.includes(category) ||
@@ -88,7 +91,8 @@ function handleDownloadAction(downloadUrl, classification, action, suggest) {
 
 function processDownload(downloadUrl, apiUrl, suggest) {
   handleApiCallWithRetry(apiUrl, { ApiVersion: "v1", Url: downloadUrl })
-    .then((classification) => {
+    .then((data) => {
+      const classification = data.urlClassification;
       const action = isDownloadBlocked(classification) ? "block" : "allow";
       handleDownloadAction(downloadUrl, classification, action, suggest);
     })
@@ -149,7 +153,8 @@ function handleDownloadCreated(downloadItem) {
         const apiUrl = getApiUrl(CONFIG.TENANT_ID);
 
         handleApiCallWithRetry(apiUrl, { ApiVersion: "v1", Url: downloadUrl })
-          .then((classification) => {
+          .then((data) => {
+            const classification = data.urlClassification;
             const action = isDownloadBlocked(classification)
               ? "block"
               : "allow";
