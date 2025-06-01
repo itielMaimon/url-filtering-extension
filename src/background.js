@@ -172,10 +172,13 @@ function handleDownloadCreated(downloadItem) {
                   `Download ${downloadItem.id} cancelled due to policy restrictions.`
                 );
               });
-              showBlockNotification(
+              handleDownloadAction(
                 downloadUrl,
-                classification.category,
-                classification.riskLevel
+                {
+                  category: "Verification Error",
+                  riskLevel: CONFIG.MAX_ALLOWED_RISK_LEVEL + 1,
+                },
+                "block"
               );
             } else {
               chrome.downloads.resume(downloadItem.id, () => {
@@ -192,10 +195,13 @@ function handleDownloadCreated(downloadItem) {
                 `Download ${downloadItem.id} cancelled due to verification error.`
               );
             });
-            showBlockNotification(
+            handleDownloadAction(
               downloadUrl,
-              classification.category,
-              classification.riskLevel
+              {
+                category: "Verification Error",
+                riskLevel: CONFIG.MAX_ALLOWED_RISK_LEVEL + 1,
+              },
+              "block"
             );
           });
       }
