@@ -7,6 +7,11 @@ const CONFIG = {
   API_TIMEOUT_MS: 5000,
 };
 
+const DEFAULT_CLASSIFICATION = {
+  category: "Unknown",
+  riskLevel: CONFIG.MAX_ALLOWED_RISK_LEVEL + 1,
+};
+
 function getApiUrl(tenantId) {
   return `${CONFIG.API_BASE_URL}?x-tenant-id=${encodeURIComponent(tenantId)}`;
 }
@@ -102,10 +107,7 @@ function processDownload(downloadItem, apiUrl, suggest) {
       const action = CONFIG.DEFAULT_BLOCK_ON_ERROR ? "block" : "allow";
       handleDownloadAction(
         downloadItem,
-        {
-          category: "Unknown",
-          riskLevel: CONFIG.MAX_ALLOWED_RISK_LEVEL + 1,
-        },
+        DEFAULT_CLASSIFICATION,
         action,
         suggest
       );
@@ -186,14 +188,7 @@ function handleDownloadCreated(downloadItem) {
               });
             }
             const action = CONFIG.DEFAULT_BLOCK_ON_ERROR ? "block" : "allow";
-            handleDownloadAction(
-              downloadItem,
-              {
-                category: "Unknown",
-                riskLevel: CONFIG.MAX_ALLOWED_RISK_LEVEL + 1,
-              },
-              action
-            );
+            handleDownloadAction(downloadItem, DEFAULT_CLASSIFICATION, action);
           });
       }
     });
