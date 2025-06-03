@@ -11,9 +11,6 @@ function getApiUrl(tenantId) {
   return `${CONFIG.API_BASE_URL}?x-tenant-id=${encodeURIComponent(tenantId)}`;
 }
 
-// Store pending downloads
-const pendingDownloads = new Map();
-
 function handleApiCallWithRetry(url, body, retries = 3, delay = 1000) {
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), CONFIG.API_TIMEOUT_MS);
@@ -74,35 +71,39 @@ function showBlockNotification(downloadUrl, category, riskLevel) {
   });
 }
 
-function handleDownloadAction(downloadUrl, classification, action, suggest) {
+function handleDownloadAction(downloadItem, classification, action, suggest) {
   if (action === "block") {
     suggest?.({}); // Cancel the download
     showBlockNotification(
-      downloadUrl,
+      downloadItem.url,
       classification.category,
       classification.riskLevel
     );
   } else if (action === "allow") {
-    suggest?.({ filename: pendingDownloads.get(downloadUrl)?.filename });
+    suggest?.({ filename: downloadItem.filename });
   }
-
-  pendingDownloads.delete(downloadUrl);
 }
 
-function processDownload(downloadUrl, apiUrl, suggest) {
-  handleApiCallWithRetry(apiUrl, { ApiVersion: "v1", Url: downloadUrl })
+function processDownload(downloadItem, apiUrl, suggest) {
+  handleApiCallWithRetry(apiUrl, {
+    ApiVersion: "v1",
+    Url: downloadItem.url,
+  })
     .then((data) => {
       const classification = data.urlClassification;
       const action = isDownloadBlocked(classification) ? "block" : "allow";
-      handleDownloadAction(downloadUrl, classification, action, suggest);
+      handleDownloadAction(downloadItem, classification, action, suggest);
     })
     .catch((error) => {
-      console.error(`Error processing download for ${downloadUrl}:`, error);
+      console.error(
+        `Error processing download for ${downloadItem.url}:`,
+        error
+      );
       const action = CONFIG.DEFAULT_BLOCK_ON_ERROR ? "block" : "allow";
       handleDownloadAction(
-        downloadUrl,
+        downloadItem,
         {
-          category: "Processing Error",
+          category: "Unknown",
           riskLevel: CONFIG.MAX_ALLOWED_RISK_LEVEL + 1,
         },
         action,
@@ -118,19 +119,13 @@ function handleDeterminingFilename(downloadItem, suggest) {
     return false;
   }
 
-  const downloadUrl = downloadItem.url;
   const apiUrl = getApiUrl(CONFIG.TENANT_ID);
 
   console.log(
-    `onDeterminingFilename: Intercepting download. URL: ${downloadUrl}`
+    `onDeterminingFilename: Intercepting download. URL: ${downloadItem.url}`
   );
 
-  pendingDownloads.set(downloadUrl, {
-    filename: downloadItem.filename,
-    url: downloadUrl,
-  });
-
-  processDownload(downloadUrl, apiUrl, suggest);
+  processDownload(downloadItem, apiUrl, suggest);
 
   return true;
 }
@@ -149,10 +144,12 @@ function handleDownloadCreated(downloadItem) {
       } else {
         console.log(`Download ${downloadItem.id} paused for checking.`);
 
-        const downloadUrl = downloadItem.url;
         const apiUrl = getApiUrl(CONFIG.TENANT_ID);
 
-        handleApiCallWithRetry(apiUrl, { ApiVersion: "v1", Url: downloadUrl })
+        handleApiCallWithRetry(apiUrl, {
+          ApiVersion: "v1",
+          Url: downloadItem.url,
+        })
           .then((data) => {
             const classification = data.urlClassification;
             const action = isDownloadBlocked(classification)
@@ -164,7 +161,7 @@ function handleDownloadCreated(downloadItem) {
                   `Download ${downloadItem.id} cancelled due to policy restrictions.`
                 );
               });
-              handleDownloadAction(downloadUrl, classification, "block");
+              handleDownloadAction(downloadItem, classification, "block");
             } else {
               chrome.downloads.resume(downloadItem.id, () => {
                 console.log(
@@ -175,18 +172,27 @@ function handleDownloadCreated(downloadItem) {
           })
           .catch((error) => {
             console.error("Error verifying download URL:", error);
-            chrome.downloads.cancel(downloadItem.id, () => {
-              console.log(
-                `Download ${downloadItem.id} cancelled due to verification error.`
-              );
-            });
+            if (CONFIG.DEFAULT_BLOCK_ON_ERROR) {
+              chrome.downloads.cancel(downloadItem.id, () => {
+                console.log(
+                  `Download ${downloadItem.id} cancelled due to verification error.`
+                );
+              });
+            } else {
+              chrome.downloads.resume(downloadItem.id, () => {
+                console.log(
+                  `Download ${downloadItem.id} resumed despite verification error.`
+                );
+              });
+            }
+            const action = CONFIG.DEFAULT_BLOCK_ON_ERROR ? "block" : "allow";
             handleDownloadAction(
-              downloadUrl,
+              downloadItem,
               {
-                category: "Verification Error",
+                category: "Unknown",
                 riskLevel: CONFIG.MAX_ALLOWED_RISK_LEVEL + 1,
               },
-              "block"
+              action
             );
           });
       }
