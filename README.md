@@ -53,6 +53,6 @@ If you want to use native ES modules:
 ## API Integration
 
 The extension integrates with a URL classification API at:
-`http://localhost:5000/v1/api/urlfiltering`
+`http://localhost:5000/v1/api/urlFiltering`
 
 The API expects a POST request with the URL to check and returns classification details.

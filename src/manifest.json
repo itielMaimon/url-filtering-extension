@@ -1,0 +1,26 @@
+{
+  "name": "Url Filtering Block",
+  "description": "Block any downloads from URL category 'Social Networking' or risk level above 1, and display an indication to the user.",
+  "version": "1.0",
+  "manifest_version": 2,
+  "permissions": ["downloads", "tabs"],
+  "background": {
+    "scripts": ["./background.js"]
+  },
+  "content_scripts": [
+    {
+      "matches": ["<all_urls>"],
+      "js": ["./foreground.js"],
+      "run_at": "document_idle"
+    }
+  ],
+  "icons": {
+    "16": "icons/icon16.png",
+    "32": "icons/icon32.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  },
+  "browser_action": {
+    "default_popup": "./popup/popup.html"
+  }
+}
